@@ -99,7 +99,7 @@ section[data-testid="stSidebar"] > div:first-child {{
 .kpi-label {{ font-size: .72rem; letter-spacing:.08em; color:var(--ink-soft); text-transform:uppercase; }}
 .kpi-value {{ font-size: 2rem; font-weight: 800; color: var(--ink); }}
 
-.section-header {{
+.section-title {{
   margin-top: .6rem;
   padding: .55rem .8rem;
   background: color-mix(in srgb, var(--brand) 10%, transparent);
@@ -107,8 +107,8 @@ section[data-testid="stSidebar"] > div:first-child {{
   border-left: 4px solid var(--brand);
   border-radius: 10px;
   font-weight: 700;
-  display:flex; align-items:center; justify-content:space-between; gap:.5rem;
 }}
+
 .row {{ padding:.5rem .3rem; border-bottom:1px dashed var(--stroke); color:var(--ink); }}
 
 .badge {{
@@ -131,6 +131,7 @@ section[data-testid="stSidebar"] > div:first-child {{
 }}
 .rev-chip.active {{ border-color: var(--brand); box-shadow:0 0 0 2px color-mix(in srgb, var(--brand) 25%, transparent); }}
 .rev-history {{ color: var(--ink-soft); font-size:.8rem; }}
+
 .stButton>button, .stDownloadButton>button {{
   border-radius: 10px !important;
   border: 1px solid var(--stroke) !important;
@@ -222,10 +223,7 @@ if "checks" not in st.session_state:
         for _, r in items.iterrows()
     }
 
-# Per-section revision state:
-#   st.session_state["revisions"] = {
-#       "C001": {"current": "A", "history": [("A", "2025-08-21 14:05")]}
-#   }
+# Per-section revision state with history
 if "revisions" not in st.session_state:
     st.session_state["revisions"] = {}
     for code in items["section_code"].unique():
@@ -287,38 +285,34 @@ with k3:
 st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------------
-# Sidebar analytics (unchanged logic)
+# SIDEBAR ANALYTICS
 # -------------------------
 with st.sidebar:
     st.markdown('<div class="sidebar-card"><div class="sidebar-title">Analytics</div><div class="sidebar-sub">Live charts for the current view</div>', unsafe_allow_html=True)
 
-    # Overall
+    # Overall donut
     fig = plt.figure()
     sizes = [both_chk, max(tot - both_chk, 0)]
     labels = ["Completed (✓✓)", "Remaining"]
     plt.pie(sizes, labels=labels, autopct=lambda p: f"{p:.1f}%", startangle=90)
-    centre = plt.Circle((0,0),0.60,fc='white')
-    fig.gca().add_artist(centre)
+    centre_circle = plt.Circle((0,0),0.60,fc='white'); fig.gca().add_artist(centre_circle)
     plt.title("Overall completion")
     st.pyplot(fig, use_container_width=True)
 
-    # Modelador
+    # Role donuts
     fig = plt.figure()
     sizes = [m_chk, max(tot - m_chk, 0)]
     labels = ["Modelador ✓", "Remaining"]
     plt.pie(sizes, labels=labels, autopct=lambda p: f"{p:.1f}%", startangle=90)
-    centre = plt.Circle((0,0),0.60,fc='white')
-    fig.gca().add_artist(centre)
+    centre_circle = plt.Circle((0,0),0.60,fc='white'); fig.gca().add_artist(centre_circle)
     plt.title("Modelador progress")
     st.pyplot(fig, use_container_width=True)
 
-    # Coordinador
     fig = plt.figure()
     sizes = [c_chk, max(tot - c_chk, 0)]
     labels = ["Coordinador ✓", "Remaining"]
     plt.pie(sizes, labels=labels, autopct=lambda p: f"{p:.1f}%", startangle=90)
-    centre = plt.Circle((0,0),0.60,fc='white')
-    fig.gca().add_artist(centre)
+    centre_circle = plt.Circle((0,0),0.60,fc='white'); fig.gca().add_artist(centre_circle)
     plt.title("Coordinador progress")
     st.pyplot(fig, use_container_width=True)
 
@@ -334,12 +328,12 @@ with st.sidebar:
         .assign(pct=lambda d: (d["done"]/d["total"]*100).round(1))
         .sort_values(["section_code"])
     )
+
     if not sec_df.empty:
         fig = plt.figure(figsize=(3.6, 2.2))
         plt.bar(sec_df["section_code"], sec_df["pct"])
         plt.title("By section (✓✓ %)")
-        plt.ylabel("%"); plt.ylim(0, 100)
-        plt.xticks(rotation=90, fontsize=7)
+        plt.ylabel("%"); plt.ylim(0, 100); plt.xticks(rotation=90, fontsize=7)
         st.pyplot(fig, use_container_width=True)
 
         sel = st.selectbox(
@@ -358,8 +352,7 @@ with st.sidebar:
         sizes = [s_done, max(s_total - s_done, 0)]
         labels = ["Completed (✓✓)", "Remaining"]
         plt.pie(sizes, labels=labels, autopct=lambda p: f"{p:.1f}%", startangle=90)
-        centre = plt.Circle((0,0),0.60,fc='white')
-        fig.gca().add_artist(centre)
+        centre_circle = plt.Circle((0,0),0.60,fc='white'); fig.gca().add_artist(centre_circle)
         plt.title(f"{sel} completion")
         st.pyplot(fig, use_container_width=True)
 
@@ -371,37 +364,23 @@ with st.sidebar:
 st.markdown('<div class="band"><span class="badge">Live — Interactive</span></div>', unsafe_allow_html=True)
 
 # -------------------------
-# CHECKLIST with Revisions + IFC Ready + dependency
+# CHECKLIST with Revisions + IFC Ready (instant) + dependency
 # -------------------------
 st.markdown('<div class="band">', unsafe_allow_html=True)
 for (disc, code, title), group in view.groupby(["Discipline","section_code","section_title"], sort=False):
-    # --- Section header with Revision controls and IFC Ready badge
-    # Compute IFC readiness for this section
-    sec_all_done = all(
-        st.session_state["checks"][r["item_id"]]["MODELADOR"] == 1 and
-        st.session_state["checks"][r["item_id"]]["COORDINADOR"] == 1
-        for _, r in group.iterrows()
-    )
-    ifc_html = (
-        "<span class='badge-green'>IFC READY</span>" if sec_all_done
-        else "<span class='badge-gray'>IFC not ready</span>"
-    )
 
-    # Current revision + history from session
+    # SECTION TITLE
+    st.markdown(f"<div class='section-title'>{code} — {title}</div>", unsafe_allow_html=True)
+
+    # Placeholder just under the title to show IFC status and keep it updatable immediately
+    ifc_slot = st.empty()
+
+    # REVISION controls & history
     rev_state = st.session_state["revisions"].setdefault(code, {
         "current": "A", "history": [("A", datetime.now().strftime("%Y-%m-%d %H:%M"))]
     })
     cur_rev = rev_state["current"]
 
-    # Header row
-    st.markdown(
-        f"<div class='section-header'>"
-        f"{code} — {title}"
-        f"<div>{ifc_html}</div>"
-        f"</div>", unsafe_allow_html=True
-    )
-
-    # Revision controls band (chips + select)
     rcol1, rcol2 = st.columns([2, 1])
     with rcol1:
         chips = "".join(
@@ -409,7 +388,6 @@ for (disc, code, title), group in view.groupby(["Discipline","section_code","sec
             for ch in ["A","B","C","D"]
         )
         st.markdown(chips, unsafe_allow_html=True)
-        # history line
         hist_str = " · ".join(f"{rv}@{ts}" for rv, ts in rev_state["history"][-6:])
         st.markdown(f"<div class='rev-history'>History: {hist_str}</div>", unsafe_allow_html=True)
     with rcol2:
@@ -419,13 +397,12 @@ for (disc, code, title), group in view.groupby(["Discipline","section_code","sec
             index=["A","B","C","D"].index(cur_rev),
             key=f"rev_select_{code}"
         )
-        # If revision changed, append to history and update
         if new_rev != cur_rev:
             rev_state["current"] = new_rev
             rev_state["history"].append((new_rev, datetime.now().strftime("%Y-%m-%d %H:%M")))
             st.session_state["revisions"][code] = rev_state
 
-    # --- Bulk toggles
+    # BULK TOGGLES
     b1, b2, b3 = st.columns([.9, .6, .6])
     with b1: st.caption("Bulk toggle for this section:")
     with b2:
@@ -435,11 +412,10 @@ for (disc, code, title), group in view.groupby(["Discipline","section_code","sec
     with b3:
         if st.button(f"Coordinador: All ✓ ({code})"):
             for _, r in group.iterrows():
-                # Enforce dependency: only set coordinator if modelador already 1
                 if st.session_state['checks'][r['item_id']]['MODELADOR'] == 1:
                     st.session_state['checks'][r['item_id']]['COORDINADOR'] = 1
 
-    # --- Rows with dependency (Coordinator depends on Modelador)
+    # ROWS (Coordinator depends on Modelador; auto-clear on uncheck)
     for _, r in group.iterrows():
         iid = r["item_id"]
         cc1, cc2, cc3 = st.columns([8,2,2])
@@ -453,7 +429,6 @@ for (disc, code, title), group in view.groupby(["Discipline","section_code","sec
                 key=key_m
             )
             st.session_state["checks"][iid]["MODELADOR"] = int(st.session_state["checks"][iid]["MODELADOR"])
-            # If Modelador unchecked, force Coordinador to 0
             if st.session_state["checks"][iid]["MODELADOR"] == 0 and st.session_state["checks"][iid]["COORDINADOR"] == 1:
                 st.session_state["checks"][iid]["COORDINADOR"] = 0
         with cc3:
@@ -463,17 +438,28 @@ for (disc, code, title), group in view.groupby(["Discipline","section_code","sec
                 "Coordinador",
                 value=bool(st.session_state["checks"][iid]["COORDINADOR"]),
                 key=key_c,
-                disabled=coord_disabled  # <- dependency enforced in UI
+                disabled=coord_disabled
             )
-            # Safety: coerce to int
             st.session_state["checks"][iid]["COORDINADOR"] = int(st.session_state["checks"][iid]["COORDINADOR"])
+
+    # AFTER rows: recompute IFC readiness immediately and update the badge
+    sec_all_done = all(
+        st.session_state["checks"][r["item_id"]]["MODELADOR"] == 1 and
+        st.session_state["checks"][r["item_id"]]["COORDINADOR"] == 1
+        for _, r in group.iterrows()
+    )
+    if sec_all_done:
+        ifc_html = "<span class='badge-green'>IFC READY</span>"
+    else:
+        ifc_html = "<span class='badge-gray'>IFC not ready</span>"
+    ifc_slot.markdown(ifc_html, unsafe_allow_html=True)
 
     st.markdown("<hr style='border:none;height:1px;background:var(--stroke);opacity:.6;margin:8px 0;'/>", unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------------
-# Export (unchanged)
+# Export
 # -------------------------
 def to_excel_bytes(items_df: pd.DataFrame, checks_state: dict) -> bytes:
     out_df = items_df.copy()
